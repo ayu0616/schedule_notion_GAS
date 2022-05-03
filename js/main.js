@@ -1,13 +1,10 @@
 "use strict";
-const NOTION_TOKEN = "secret_FAq57RVurbCK8ZmUu5mKeQ5crJho5agZzFGPgUyNJ2H";
 const NOTION_API_VERSION = "2022-02-22";
 const NOTION_HEADERS = {
     "Content-type": "application/json",
     Authorization: "Bearer " + NOTION_TOKEN,
     "Notion-Version": NOTION_API_VERSION,
 };
-const DB_ID = "693ffff5c6c44ff88d6cf0340b3e4656";
-const CAL_ID = "16smce49s0iguq930dq7v55f6k@group.calendar.google.com";
 const COMPLETE_TEXT = "【完了済み】";
 class Task {
     // title;
@@ -17,8 +14,9 @@ class Task {
     // isCompleted;
     // id;
     // isNewTask;
-    // notionId;
+    // notionPage;
     // calendarEvent;
+    // createdTime;
     constructor({ title, tags, startTime, endTime, isCompleted, id }) {
         this.title = title;
         this.tags = tags;
@@ -28,15 +26,15 @@ class Task {
         this.isNewTask = !id;
         this.id = this.isNewTask ? this.setNewId() : id;
     }
-    setNotionId(id) {
-        this.notionId = id;
+    setNotionPage(notionPage) {
+        this.notionPage = notionPage;
     }
-    getNotionId() {
-        if (this.notionId) {
-            return this.notionId;
+    getNotionPage() {
+        if (this.notionPage) {
+            return this.notionPage;
         }
         else {
-            throw new Error("notionId is undefined");
+            throw new Error("notionPage is undefined");
         }
     }
     setCalendarEvent(event) {
@@ -50,6 +48,22 @@ class Task {
             throw new Error("calendarEvent is undefined");
         }
     }
+    setCreatedTime() {
+        if (this.notionPage) {
+            this.createdTime = new Date(this.notionPage.created_time);
+        }
+        if (this.calendarEvent) {
+            this.createdTime = new Date(this.calendarEvent.getDateCreated());
+        }
+    }
+    getCreatedTime() {
+        if (this.createdTime) {
+            return this.createdTime;
+        }
+        else {
+            throw new Error("createdTime is undefined");
+        }
+    }
     static fromNotion(notionPage) {
         const notionProps = notionPage.properties;
         const taskProps = {
@@ -61,7 +75,7 @@ class Task {
             id: notionProps.ID.rich_text[0].text.content,
         };
         const task = new Task(taskProps);
-        task.setNotionId(notionPage.id);
+        task.setNotionPage(notionPage);
         return task;
     }
     static fromCalendar(event) {
@@ -93,7 +107,7 @@ class Task {
     }
     setNewId() {
         const fromDate = new Date().getTime().toString(16);
-        const random = new Array(3)
+        const random = new Array(5)
             .fill("")
             .map(() => this.rand16())
             .join("");
@@ -105,6 +119,59 @@ class Task {
     }
     isHasTag() {
         return Boolean(this.id.toString());
+    }
+    getCalendarDesc() {
+        const tagsDesc = this.tags.map((tag) => "#" + tag).join(" ");
+        const idDesc = "id: " + this.id;
+        return tagsDesc + "\n" + idDesc;
+    }
+    createNewEvent(cal) {
+        const options = { description: this.getCalendarDesc() };
+        const newEvent = cal.createEvent(this.title, this.startTime, this.endTime, options);
+        newEvent.addPopupReminder(0);
+        newEvent.addPopupReminder(60);
+        this.setCalendarEvent(newEvent);
+        return newEvent;
+    }
+}
+class TaskArray extends Array {
+    constructor(tasks) {
+        super(...tasks);
+    }
+    static fromNotion(notionPages) {
+        const tasks = notionPages.map((notionPage) => {
+            return Task.fromNotion(notionPage);
+        });
+        return new TaskArray(tasks);
+    }
+    static fromCalendar(events) {
+        const tasks = events.map((event) => {
+            return Task.fromCalendar(event);
+        });
+        return new TaskArray(tasks);
+    }
+    /**カレンダーから取得したタスクにNotionのページを追加する */
+    addNotion(notionPages) { }
+    /**Notionから取得したタスクにカレンダーのイベントを追加する */
+    addCalendar(events) { }
+    getDuplicatedIdTasks() {
+        const duplicatedIds = this.filter((task) => {
+            return this.filter((task2) => task.id === task2.id).length >= 2;
+        }).map((task) => task.id);
+        const duplicatedIdUnique = new Array(...new Set(duplicatedIds));
+        const duplicatedIdTasks = [];
+        duplicatedIdUnique.forEach((id) => {
+            const duplicatedIdTask = new TaskArray(this.filter((task) => task.id === id));
+            duplicatedIdTask.sort((a, b) => {
+                return a.startTime.getTime() - b.startTime.getTime();
+            });
+            duplicatedIdTasks.push(duplicatedIdTask);
+        });
+        return duplicatedIdTasks;
+    }
+    createNewEvents() {
+        const cal = CalendarApp.getCalendarById(CAL_ID);
+        const newEvents = this.map((task) => task.createNewEvent(cal));
     }
 }
 const queryNotionDatabase = (payload = {}) => {
@@ -120,17 +187,17 @@ const queryNotionDatabase = (payload = {}) => {
     const pages = resJson["results"];
     return pages;
 };
-const getEvents = () => {
+const getCalendarEvents = () => {
     const cal = CalendarApp.getCalendarById(CAL_ID);
     const zeroTime = new Date(0);
     const futureTime = new Date(2100, 0);
     const events = cal.getEvents(zeroTime, futureTime);
     return events;
 };
-const test = () => {
-    const cal = CalendarApp.getCalendarById(CAL_ID);
-    const zeroTime = new Date(0);
-    const futureTime = new Date(2100, 0);
-    const events = cal.getEvents(zeroTime, futureTime);
-    const eventSeries = events.map((event) => event.getEventSeries());
+const fromNotionToCalendar = () => {
+    const notionPages = queryNotionDatabase();
+    const tasks = TaskArray.fromNotion(notionPages);
+    const newTasks = new TaskArray(tasks.filter((task) => task.isNewTask));
+    const existTasks = new TaskArray(tasks.filter((task) => !task.isNewTask));
 };
+const test = () => { };

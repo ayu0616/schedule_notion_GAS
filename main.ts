@@ -1,12 +1,9 @@
-const NOTION_TOKEN = "secret_FAq57RVurbCK8ZmUu5mKeQ5crJho5agZzFGPgUyNJ2H";
 const NOTION_API_VERSION = "2022-02-22";
 const NOTION_HEADERS = {
 	"Content-type": "application/json",
 	Authorization: "Bearer " + NOTION_TOKEN,
 	"Notion-Version": NOTION_API_VERSION,
 };
-const DB_ID = "693ffff5c6c44ff88d6cf0340b3e4656";
-const CAL_ID = "16smce49s0iguq930dq7v55f6k@group.calendar.google.com";
 const COMPLETE_TEXT = "【完了済み】";
 
 type NotionQueryPayload = {};
